@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>To-Do List</title>
+    <link rel="stylesheet" href="todo-styles.css">
+    <script src="https://www.gstatic.com/firebasejs/8.2.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.2.1/firebase-database.js"></script>
+
+    
+</head>
+<body>
+    <div class="container">
+        <div class="todo-app">
+            <div class="addDiv">
+                <h2>To-Do List <img src="images/todo_icon.png" alt="icon">
+                    <img src="images/dustbin.png" class="bin" title="Clear Completed Tasks" id="clear-tasks" alt="remove tasks"></h2>
+                <div class="row">
+                    <textarea id="input-box" placeholder="Enter a task" maxlength="400"></textarea>
+                    <button id="add-task">Add</button>
+                </div>
+            
+            </div>
+            
+                <ul id="list-container">
+                    <!-- <li class="checked">Task 1</li>
+                    <li>Task 2</li>
+                    <li>Task 3</li> -->
+                </ul>
+            
+            
+        </div>
+        
+
+    </div>
+<script>
+    
+    const firebaseConfig = {
+        apiKey: "AIzaSyBrrPYPa_KVcCoQkCcQ51CxUA7RDMQBO9I",
+        authDomain: "to-do-list-cef00.firebaseapp.com",
+        databaseURL: "https://to-do-list-cef00-default-rtdb.firebaseio.com",
+        projectId: "to-do-list-cef00",
+        storageBucket: "to-do-list-cef00.appspot.com",
+        messagingSenderId: "882467650863",
+        appId: "1:882467650863:web:331fea17840da9878df5da",
+        measurementId: "G-J9VG15WDD9"
+    };
+    firebase.initializeApp(firebaseConfig);
+
+    
+
+// Initialize Firestore
+    const db = firebase.database();
+
+    const inputBox = document.getElementById("input-box");
+    const listContainer = document.getElementById("list-container");
+    const addTaskBtn = document.getElementById("add-task");
+    const clearTasksBtn = document.getElementById("clear-tasks");
+    
+    addTaskBtn.addEventListener("click", function(){
+        let trimedInput = inputBox.value.trim();
+        if(trimedInput !== ''){
+            let task = inputBox.value;
+            db.ref('tasks/').push({
+                task: task,
+                completed: false
+            });
+            inputBox.value = '';
+            showNotification("New Task Added", task);
+        }
+        
+    });
+
+    function createAndAppendTask(id, task){
+        let listItem = document.createElement("li");
+        
+        let formattedTask = task.task.replace(/\n/g, '<br>');
+        listItem.innerHTML = formattedTask;
+        // listItem.style.whiteSpace = "pre-line";
+        let closeIcon = document.createElement("span");
+        closeIcon.innerHTML = "\u00d7";
+        closeIcon.className = "close-icon";
+        listItem.appendChild(closeIcon);
+            // Add a data-id attribute to store the task ID
+        listItem.setAttribute("data-id", id);
+        if (task.completed) {
+            listItem.classList.add("checked");
+        }
+        listItem.addEventListener("click", function(e){
+            e.stopPropagation();
+            toggleTaskStatus(id, listItem);
+            // Toggle the "checked" class for styling
+            // 
+            
+        });
+
+        closeIcon.addEventListener("click", function(e) {
+            e.stopPropagation();
+            removeTask(id, listItem);
+        // Remove the task from the database and update the UI
+            // 
+        });
+        return listItem;
+    }
+
+    function toggleTaskStatus(id, listItem){
+        db.ref('tasks/' + id).once('value', function(snapshot){
+            let task = snapshot.val();
+            listItem.classList.toggle("checked");
+            db.ref('tasks/' + id).update({
+                completed: !task.completed
+            });
+        });
+        
+    }
+
+    function removeTask(id, listItem){
+        db.ref('tasks/' + id).remove();
+            listItem.remove();
+    }
+
+    
+    
+
+    db.ref('tasks/').on('value', function(snapshot){
+        let tasks = snapshot.val();
+        listContainer.innerHTML = '';
+        let task, listItem;
+        for(let id in tasks){
+            task = tasks[id];
+            listItem = createAndAppendTask(id, task);
+            
+
+            // Check if the task is completed and toggle the class accordingly
+            
+
+            listContainer.appendChild(listItem);
+
+            
+
+            
+
+            
+
+            
+
+            
+            // listContainer.addEventListener("click", function(e){
+            // e.preventDefault();
+            // if(e.target.tagName === "LI"){
+            //     e.target.classList.toggle("checked");
+                
+            //     listItem.addEventListener("click", function(){
+            //         db.ref('tasks/' + id).update({
+            //             completed: !task.completed
+            //         });
+            //     });
+
+            //     // saveData()
+            // }
+            // else if(e.target.tagName === "SPAN"){
+            //     e.target.parentElement.remove();
+            //     db.ref('tasks/' + id).remove();
+                
+            //     // saveData()
+            // }
+            // }, false);
+            
+            
+            
+        }
+        
+    });
+
+    clearTasksBtn.addEventListener("click", function() {
+        db.ref('tasks/').once('value', function(snapshot) {
+            let tasks = snapshot.val();
+            for(let id in tasks) {
+                let task = tasks[id];
+                if(task.completed) {
+                    db.ref('tasks/' + id).remove();
+                }
+            }
+        });
+    });
+
+    const messaging = firebase.messaging();
+
+    // Request permission for notifications
+    messaging.requestPermission().then(() => {
+        console.log('Notification permission granted');
+        // Get the token
+        return messaging.getToken();
+    }).then((token) => {
+        console.log('Token:', token);
+    }).catch((error) => {
+        console.error('Error getting permission or token:', error);
+    });
+
+    // Handle incoming messages (when the app is in the foreground)
+    messaging.onMessage((payload) => {
+        console.log('Message received:', payload);
+        // You can customize how to handle the incoming message here
+        // For example, show a notification using the Notification API
+        showNotification(payload.notification.title, payload.notification.body);
+    });
+
+    function showNotification(title, body){
+        if('Notification' in window){
+            if(Notification.permission === "granted"){
+                new Notification(title, {body: body});
+            }
+            else if(Notification.permission !== "denied"){
+                Notification.requestPermission().then(function(permission){
+                    if(permission === "granted"){
+                        new Notification(title, {body: body});
+                    }
+                });
+            }
+        }
+        
+    }
+
+    // function addTask(){
+    //     let input = inputBox.value;
+    //     let trimedInput = input.trim();
+
+    //     if(trimedInput !== ''){
+    //         let li = document.createElement("li");
+    //         li.style.overflowWrap = "break-word";
+    //         li.innerHTML = inputBox.value;
+    //         listContainer.appendChild(li);
+    //         let span = document.createElement("span");
+    //         span.innerHTML = "\u00d7";
+    //         li.appendChild(span);
+    //     }
+        
+    //     inputBox.value = "";
+    //     saveData()
+    // }
+
+    
+
+    // function clearTasks(){
+    //     let checkedItems = document.querySelectorAll('.checked');
+
+    //     for(let i=0; i<checkedItems.length; i++){
+    //         checkedItems[i].remove();
+    //     }
+    //     saveData();
+    // }
+
+    // window.addEventListener("scroll", function(){
+    //     let addDiv = document.querySelector("h2");
+    //     addDiv.classList.toggle("sticky", this.window.scrollY > 0);
+    // })
+
+    // function saveData(){
+    //     let tasks = listContainer.innerHTML;
+    //     firebase.database().ref('users/todo').set({
+    //         tasks: tasks
+    //     });
+    // }
+
+    // function showData(){
+    //     firebase.database().ref('users/todo').on('value', (snapshot) => {
+    //         const data = snapshot.val();
+    //         if (data) {
+    //             listContainer.innerHTML = data.tasks;
+    //         }
+    //     });
+    // }
+    // showData();
+</script>
+
+
+</body>
+</html>
